@@ -1,0 +1,86 @@
+# This is a workflow to create release on every push to a tag matching the pattern v*
+
+name: Create Release
+
+# Controls when the action will run. Triggers the workflow on tag push
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: changelog
+        uses: scottbrenner/generate-changelog-action@master
+        id: Changelog
+        env:
+          REPO: ${{ github.repository }}
+
+      - name: Prerelease or not
+        id: pre_or_not
+        run: |
+          if [[ ${{ github.ref }} =~ prerelease || ${{ github.ref }} =~ beta ]]
+          then
+            echo "::set-output name=prerelease::true"
+          else
+            echo "::set-output name=prerelease::false"
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ${{ steps.Changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ steps.pre_or_not.outputs.prerelease }}
+
+      - name: Create Translation Release
+        env:
+          API_ENDPOINT: ${{ secrets.ASSET_MANAGER_API_ENDPOINT }}
+          API_KEY: ${{ secrets.ASSET_MANAGER_API_KEY }}
+        run: |
+          # Extract version from tag ref (removes refs/tags/ prefix)
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Sending version $VERSION to API"
+          echo "Full ref: ${{ github.ref }}"
+          echo "Extracted version: $VERSION"
+
+          # Check if API credentials are configured
+          if [[ -z "$API_ENDPOINT" || -z "$API_KEY" ]]; then
+            echo "⚠️  API_ENDPOINT or API_KEY not configured - skipping translation release"
+            echo "To enable translation release, configure these secrets in your repository:"
+            echo "- API_ENDPOINT: Your webhook endpoint URL"
+            echo "- API_KEY: Your authorization token"
+            exit 0
+          fi
+
+          # Make API call with version data
+          echo "📡 Making API call to notify about release..."
+          curl --location "$API_ENDPOINT" \
+            --header 'Content-Type: application/json' \
+            --header "Authorization: Bearer $API_KEY" \
+            --data "{
+              \"portal\": \"fleet\",
+              \"version\": \"$VERSION\"
+            }"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully notified translation API about release $VERSION"
+          else
+            echo "❌ Failed to notify translation API about release"
+            exit 1
+          fi

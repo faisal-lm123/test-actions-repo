@@ -19,35 +19,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: changelog
-        uses: scottbrenner/generate-changelog-action@master
-        id: Changelog
-        env:
-          REPO: ${{ github.repository }}
-
-      - name: Prerelease or not
-        id: pre_or_not
-        run: |
-          if [[ ${{ github.ref }} =~ prerelease || ${{ github.ref }} =~ beta ]]
-          then
-            echo "::set-output name=prerelease::true"
-          else
-            echo "::set-output name=prerelease::false"
-          fi
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            ${{ steps.Changelog.outputs.changelog }}
-          draft: false
-          prerelease: ${{ steps.pre_or_not.outputs.prerelease }}
-
       - name: Create Translation Release
         env:
           API_ENDPOINT: ${{ secrets.ASSET_MANAGER_API_ENDPOINT }}

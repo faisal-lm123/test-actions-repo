@@ -1,3 +1,3 @@
 # test-actions-repo
 
-v10.5.1-beta.0
+v10.5.2-beta.0
